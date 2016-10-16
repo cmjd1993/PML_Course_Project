@@ -1,0 +1,158 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Cathy Dunne"
+date: "16 October 2016"
+output: html_document
+---
+
+```{r, message=FALSE, results='hide', warning = FALSE}
+
+# Load packages
+
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+
+```
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behaviour, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+The data is from accelerometers on the belt, forearm, arm, and dumbell of 6 healthy participants. They were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). 
+
+Note: Class A corresponds to the specified execution of the exercise, the other 4 classes relate to common mistake that are made when lifting weights.
+
+Read more at this link: http://groupware.les.inf.puc-rio.br/har
+
+## Goal 
+
+The goal of this project is to use this data to predict the manner in which they do the particular exercises. i.e. predict the fashions of the Dumbbell Biceps Curl performed by each participant. Can we build a prediction model so that the correct activity class be accurately predicted?
+
+
+## Loading and Cleaning Data
+
+```{r, echo = TRUE}
+
+TrainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+TestURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+train <- read.csv(url(TrainURL), na.strings=c("NA","#DIV/0!",""))
+test <- read.csv(url(TestURL), na.strings=c("NA","#DIV/0!",""))
+```
+
+
+The train dataset contains 19622 observations and 160 variables. To make this data set easier to work with, we need to remove the columns that contain NA missing values. 
+
+```{r, echo = TRUE}
+# remove NAs
+train <- train[, colSums(is.na(train)) == 0]
+test <- test[, colSums(is.na(test)) == 0]
+
+```
+
+Furthermore, there are also variables that do not contribute to the accelerometer measurements. This relates to the first 7 variables in this dataset. These will also need to be removed.
+
+```{r, echo = TRUE}
+# Remove first 7 variables
+train_clean <- train[, -c(1:7)]
+test_clean <- test[, -c(1:7)]
+
+```
+
+The clean train dataset contain 53 variables and 19622 observations. The clean test dataset contains the same 53 variables but only 20 observations.
+
+
+## Splitting Data
+
+Instead of using the whole *train_clean* dataset to build the model, we can perform cross validation by splitting the dataset further into training and test datasets. The *train_clean* dataset is split into training and testing datasets. This is split so that 70% of the data goes into a training set and 30% of the data goes into a testing dataset. 
+
+```{r, echo = TRUE}
+
+# Splittig dataset into training and testing datasets using createDataPartition 
+set.seed(7403)
+inTrain = createDataPartition(train_clean$classe, p = 0.7, list = FALSE)
+training = train_clean[inTrain,]
+testing = train_clean[-inTrain,]
+
+```
+
+## The Model
+
+There are many options for predictive models. However, to save time and word count, we have decided to try the classification trees and random forests methods to predict the outcomes. We willtry both models and then choose which is the most accurate predictor.
+
+### Classifcation Trees
+
+**PLEASE NOTE: I use my Dad's computer, that's why it is stamped with sdunne. This is my own work**
+
+```{r, echo= TRUE}
+set.seed(7403)
+
+# create model for classifaction tree using train() from caret package
+Class_Model <- train(classe ~., data = training, method = "rpart")
+Class_Model
+
+# plot classification tree
+fancyRpartPlot(Class_Model$finalModel)
+
+# apply prediciton to testing dataset using predict() for cross validation
+Class_Predict <- predict(Class_Model, testing)
+
+# create confusion matrix
+Class_Conf<- confusionMatrix(testing$classe, Class_Predict)
+
+# get Accuracy
+Class_Acc <- Class_Conf$overall[1]
+Class_Acc
+
+# Out of sample error rate
+OOS_Class <- 1 - Class_Acc
+```
+
+The **Accuracy** is `r (Class_Acc)*100` %. The expected **Out of Sample Error Rate** is `r (OOS_Class)*100`%. Therefore, it is clear to see that the classification tree is not very good at predicting our outcomes.
+
+### Random Forests
+
+```{r, echo = TRUE}
+set.seed(7403)
+
+# create model for random forests using randomForest() 
+Forest_Model = randomForest(classe ~., data = training)
+Forest_Model
+
+# apply prediciton to testing dataset using predict() for cross validation
+Forest_Predict <- predict(Forest_Model, testing)
+
+# create confusion matrix
+Forest_Conf <- confusionMatrix(testing$classe, Forest_Predict)
+
+# get Accuracy from created confusion matrix
+Forest_Acc <- Forest_Conf$overall[1]
+Forest_Acc
+
+# Out of sample error rate
+OOS_Forest <- 1 - Forest_Acc
+
+# plot Error Rate vs. Number of Trees
+plot(Forest_Model, main = "Random Forests Model Error Rate")
+
+```
+
+The **Accuracy** is `r (Forest_Acc)*100`%. the expected **Out of Sample Error Rate** is `r (OOS_Forest)*100`%. This is clearly a more accurate prediction model than the previous classification tree. Random Forests have a tendency to produce more accurate results, however, one must be aware that this reduces speed and interpretability and can cause over-fitting. 
+
+
+## Predicting Results on Test Data
+
+We have chosen our Random Forests Prediction Model to predict the the classe of each participant's exercise. We can now predict the outcomes for variable *classe* in the test data set provided. 
+
+```{r, echo = TRUE}
+# use Forest_Model to predict outcomes for test_clean
+Test_Predict <- predict(Forest_Model, test_clean)
+Test_Predict
+
+```
+
+## Conclusions
+
+This report has described how a model was built to determine the manner in which participants in the study did the exercise. This was done through assessing two types of Prediction Models; Classification Tress and Random Forests. Cross validation was conducted with both models by splitting the *train_clean* dataset into *training* and *testing* datasets to determine Accuracy and Out of Sample Error. Based on these results, it can be concluded that the Random Forests Model was the best Model to use for predicting outcomes.  
